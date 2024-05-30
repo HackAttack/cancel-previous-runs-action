@@ -11,6 +11,9 @@ event=$GITHUB_EVENT_NAME
 current_run_id=$GITHUB_RUN_ID
 # Get current run `createdAt`
 current_run_created_at=$(gh run view $current_run_id --repo $repository --json createdAt --jq '.[]')
+# We don't want to do an exact timestamp match because GitHub's timestamp can be off by a second or two
+grace_period=3
+cutoff=$(date --date @$(( $(date --date $current_run_created_at +%s) - $grace_period )) --utc +%FT%TZ)
 
 # Define the list of workflows for jq
 if [ -z "$workflow_names" ]; then
@@ -38,6 +41,7 @@ echo "workflows_jq_selector:    $workflows_jq_selector"
 echo "event:                    $event"
 echo "current_run_id:           $current_run_id"
 echo "current_run_created_at:   $current_run_created_at"
+echo "cutoff:                   $cutoff"
 
 if [ "$event" == "merge_group" ]; then
   ###########################
@@ -65,7 +69,7 @@ if [ "$event" == "merge_group" ]; then
           | select(.event == "'${event}'")
           | select(.status == "in_progress" or .status == "queued")
           | select(.databaseId != '"${current_run_id}"')
-          | select(.createdAt < "'${current_run_created_at}'"))')
+          | select(.createdAt < "'${cutoff}'"))')
 
 elif [ "$event" == "pull_request" ] || [ "$event" == "push" ]; then
   ###########################
@@ -95,7 +99,7 @@ elif [ "$event" == "pull_request" ] || [ "$event" == "push" ]; then
           | select(.event == "'${event}'")
           | select(.status == "in_progress" or .status == "queued")
           | select(.databaseId != '"${current_run_id}"')
-          | select(.createdAt < "'${current_run_created_at}'"))')
+          | select(.createdAt < "'${cutoff}'"))')
 fi
 
 echo "Runs for cancellation: $runs"
